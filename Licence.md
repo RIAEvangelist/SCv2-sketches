@@ -2,9 +2,13 @@
 
 ## Copyright 2017 digiNow Inc.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software for improvement and personal modifications. All modifications should be done and committed to a feature branch, and may submitted for review and merging via a pull request. The Software is furnished for select individuals to adjust, improove and play with, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software for improvement and personal modifications. All modifications shall be submitted for code review and merging via a pull request. The Software is furnished for aprooved individuals to adjust, and improve subject to the following conditions :
 
 The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. The software is not for public uncompiled release, or commercial release without prior written aprooval.
+
+All rights are reserved by digiNow inc. and work is property of digiNow inc. all contributions shall be attributed to contributor. Contributions which make it into production releases may earn the contributor various forms of rewards and thanks from digiNow inc. subject to discussions with digiNow inc. before releasing a production code including code from contributor.
+
+All production releases including merged contributions shall result in contributors being notified to the best of digiNow inc.'s knowledge that their code will be/has been released into a production environment.
 
 ***YOU UNDERSTAND THAT THIS SOFTWEARE WHEN MODIFIED AND USED WITH THE DIGINOW SCV2 HAS THE ABILITY TO PERMANENTLY DAMAGE CONNECTED HARDWARE AND MOTORCYCLES.***
 
