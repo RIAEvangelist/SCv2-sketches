@@ -10,36 +10,51 @@ const unsigned short OUTPUT_VOLTAGE_MAX = 116; // 28 Farasis cells in series at 
 const unsigned short OUTPUT_CURRENT_MAX = 94; // 1C-rate minus 12A for the onboard charger.
 
 const unsigned short STATION_VOLTAGE = 208; // Lowest acceptable station voltage as an assumption.
-const unsigned short MAX_CHARGERS_PER_STATION = 2;
+const unsigned short MAX_CHARGERS_PER_STATION = 2; // = 6.6kW / 3.3kW per charger
+
+#define BAUD_RATE 115200
 
 unsigned short MAX_JAMPS = 0;
 int shitPin = 7;
 
 MCP_CAN CAN(SPI_CS_PIN);
 
-unsigned char stmp[8] = {
-  //volts
+// From http://www.elconchargers.com/frequentlyasked_questions.html#161971 for Elcon CAN bus messaging:
+
+// The charger expects to receive every second a message from the BMS with CAN ID 1806E5F4 and 8-byte data with the voltage and current requested.
+// If the charger doesn't receive a valid CAN message in 5 seconds, it stops charging until it receives a valid CAN message.
+// NOTE: DigiNow could use more Elcon IDs to control chargers separately, but prefers to control them in tandem.
+#define HeartbeatMessageID 0x1806E5F4
+#define HeartbeatMessageLength 8 // bytes in HeartbeatMessage
+unsigned char HeartbeatMessage[HeartbeatMessageLength] = {
+  // Voltage, high then low byte in volts
   0x04, 0x8c,
-  //amps
+  // Current, high then low byte in amps
   0x01, 0x40,
-  //reserved
+  // Reserved/status
   0x00, 0x00, 0x00, 0x00
 };
 
+#define VoltageHighByte 0
+#define VoltageLowByte 1
+#define CurrentHighByte 2
+#define CurrentLowByte 3
+
+// The charger sends out every second a CAN status message with voltage, current and status information.
 unsigned char flagRecv = 0;
-unsigned char len = 0;
-unsigned char buf[8];
+unsigned char ReceivedChargerMessageLength = 0;
+unsigned char ReceivedChargerMessage[8];
 char str[20];
 
 void setup() {
   if (Serial) {
-    Serial.begin(115200);
+    Serial.begin(BAUD_RATE);
   }
 
   pinMode(shitPin, INPUT_PULLUP);
   //digitalWrite(shitPin, LOW);
 
-  while (CAN_OK != CAN.begin(CAN_250KBPS)) {
+  while (CAN_OK != CAN.begin(CAN_250KBPS)) { // initialize the CAN bus at baud rate 250kbps
     delay(100);
   }
 
@@ -89,7 +104,7 @@ void loop() {
   if (flagRecv) {
       flagRecv = 0;
 
-      int chargerCount = 0;
+      int chargerCount = 0; // How many messages have we received from chargers in this loop represents how many chargers are connected/live.
       unsigned short volts = 0;
       unsigned short amps = 0;
       unsigned long watts = 0;
@@ -99,24 +114,25 @@ void loop() {
 //      }
 
       while (CAN_MSGAVAIL == CAN.checkReceive()) {
-          CAN.readMsgBuf(&len, buf);
-          chargerCount+=1;
+          CAN.readMsgBuf(&ReceivedChargerMessageLength, ReceivedChargerMessage);
+          chargerCount += 1;
 
-          unsigned short chargerVolts = word(buf[0],buf[1]) / 10;
+          unsigned short chargerVolts = word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]) / 10;
           if (chargerVolts > 0) {
             volts = volts + chargerVolts;
             if (chargerCount > 1) {
+              // We might divide by chargerCount here instead, to make an average voltage reading:
               volts = volts / MAX_CHARGERS_PER_STATION;
             }
           }
-          amps+=word(buf[2],buf[3]) / 10;
+          amps += word(ReceivedChargerMessage[CurrentHighByte], ReceivedChargerMessage[CurrentLowByte]) / 10;
 
 //          if (Serial) {
 //            Serial.print(chargerCount);
 //            Serial.print(" : volts - ");
-//            Serial.print(word(buf[0],buf[1]));
+//            Serial.print(word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]));
 //            Serial.print(", amps - ");
-//            Serial.print(word(buf[2],buf[3]));
+//            Serial.print(word(ReceivedChargerMessage[CurrentHighByte], ReceivedChargerMessage[CurrentLowByte]));
 //            Serial.println();
 //          }
       }
@@ -126,6 +142,7 @@ void loop() {
       unsigned short jAmps = watts / STATION_VOLTAGE;
 
       if (chargerCount > MAX_CHARGERS_PER_STATION) {
+        // We divide by 3 but it might be chargerCount instead:
         jAmps = ((watts / 3) * MAX_CHARGERS_PER_STATION) / STATION_VOLTAGE;
       }
 
@@ -141,16 +158,17 @@ void loop() {
       }
 
       if (chargingAmps > 0) {
-        stmp[2] = highByte(chargingAmps * 10);
-        stmp[3] = lowByte(chargingAmps * 10);
+        HeartbeatMessage[CurrentHighByte] = highByte(chargingAmps * 10);
+        HeartbeatMessage[CurrentLowByte] = lowByte(chargingAmps * 10);
       }
 
       if (volts > OUTPUT_VOLTAGE_MAX) {
         if (Serial) {
           Serial.println("Voltage Max exceeded, stopping charge");
         }
-        stmp[2] = highByte(0);
-        stmp[3] = lowByte(0);
+        // Set current to zero:
+        HeartbeatMessage[CurrentHighByte] = highByte(0);
+        HeartbeatMessage[CurrentLowByte] = lowByte(0);
       }
 
 
@@ -164,7 +182,7 @@ void loop() {
 //
         Serial.print(amps);
         Serial.print("A/");
-        Serial.print(word(stmp[2],stmp[3]) / 10);
+        Serial.print(word(HeartbeatMessage[CurrentHighByte], HeartbeatMessage[CurrentLowByte]) / 10);
         Serial.print(" ");
 //        Serial.print(watts);
 //        Serial.print("W, ");
@@ -177,6 +195,7 @@ void loop() {
       }
   }
 
-  CAN.sendMsgBuf(0x1806E5F4, 1, 8, stmp);
+  // frame status = extended in second arg
+  CAN.sendMsgBuf(HeartbeatMessageID, 1, HeartbeatMessageLength, HeartbeatMessage);
   delay(1000);
 }
