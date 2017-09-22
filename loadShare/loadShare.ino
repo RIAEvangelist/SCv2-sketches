@@ -13,38 +13,52 @@
 #define CurrentLowByte 3
 
 const int SPI_CS_PIN = 9;
+int lowPowerStation = 7;
 
+//6600.0kw
 const unsigned long STATION_WATTS_GOOD = 66000;
+//5000.0 kw
 const unsigned long STATION_WATTS_BAD = 50000;
 
-const unsigned short MAX_12V_WATTS = 800;
+//76.0 watts
+const unsigned short MAX_12V_WATTS = 760;
 
+//116.4 volts
 const unsigned short OUTPUT_VOLTS_MAX = 1164;
+//50.0 volts
 const unsigned short OUTPUT_VOLTS_MIN = 500;
+//32.0 amps
 const unsigned short OUTPUT_AMPS_MAX =  320;
 
+//50 watts
+const unsigned short RAMP_RATE = 500;
 
+//target wattage
 unsigned short MAX_STATION_WATTS = 0;
-int lowPowerStation = 7;
+//target amps to charge calculated by code
+//uses MAX_STATION_WATTS and volts
+unsigned short chargingAmps = 0;
+
 bool verbose=false;
 
-
 int chargerCount = 0;
-
-unsigned short chargingAmps = 0;
+//current voltage
 unsigned short volts = 0;
+//charging amps
 unsigned short amps = 0;
+//charging watts
 unsigned long watts = 0;
+//estimated watts being pulled from station
 unsigned short stationWatts =0;
 
 MCP_CAN CAN(SPI_CS_PIN);
 
 unsigned char HeartbeatMessage[HeartbeatMessageLength] = {
   // Voltage, high then low byte in volts
-  //default 116.4
+  //default 116.4 overwritten immediately
   0x04, 0x8c,
   // Current, high then low byte in amps
-  //default 32.0
+  //default 32.0 overwritten immediately
   0x01, 0x40,
   // Reserved/status
   0x00, 0x00, 0x00, 0x00
@@ -144,7 +158,7 @@ void loop() {
       //if we are not running at full tilt
       //or if we are not yet started this will be a slow ramp
       if(stationWatts<MAX_STATION_WATTS){
-        watts+=500;
+        watts+=RAMP_RATE;
       }
 
       //if we want more than the station can deliver
