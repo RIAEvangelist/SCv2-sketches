@@ -14,8 +14,8 @@
 
 const int SPI_CS_PIN = 9;
 
-const unsigned short STATION_WATTS_GOOD = 66000;
-const unsigned short STATION_WATTS_BAD = 50000;
+const unsigned long STATION_WATTS_GOOD = 66000;
+const unsigned long STATION_WATTS_BAD = 50000;
 
 const unsigned short MAX_12V_WATTS = 800;
 
@@ -56,22 +56,6 @@ unsigned char ReceivedChargerMessageLength = 0;
 unsigned char ReceivedChargerMessage[8];
 char str[20];
 
-void setup() {
-  if (Serial && verbose) {
-    Serial.begin(BAUD_RATE);
-  }
-
-  pinMode(lowPowerStation, INPUT_PULLUP);
-  //digitalWrite(lowPowerStation, LOW);
-
-  // initialize the CAN bus at baud rate 250kbps
-  while (CAN_OK != CAN.begin(CAN_250KBPS)) {
-    delay(100);
-  }
-
-  attachInterrupt(0, MCP2515_ISR, FALLING);
-}
-
 void MCP2515_ISR() {
     flagRecv = 1;
     if (Serial && verbose) {
@@ -79,7 +63,7 @@ void MCP2515_ISR() {
     }
 }
 
-void setChargingAmps(watts){
+void setChargingAmps(){
   chargingAmps = watts / volts / chargerCount;
 }
 
@@ -102,6 +86,22 @@ void setUpStationLimits(){
       MAX_STATION_WATTS = STATION_WATTS_GOOD;
     }
   }
+}
+
+void setup() {
+  if (Serial && verbose) {
+    Serial.begin(BAUD_RATE);
+  }
+
+  pinMode(lowPowerStation, INPUT_PULLUP);
+  //digitalWrite(lowPowerStation, LOW);
+
+  // initialize the CAN bus at baud rate 250kbps
+  while (CAN_OK != CAN.begin(CAN_250KBPS)) {
+    delay(100);
+  }
+
+  attachInterrupt(0, MCP2515_ISR, FALLING);
 }
 
 void loop() {
@@ -154,7 +154,7 @@ void loop() {
 
       //set this cycles charging amps
       if (watts > 0) {
-        setChargingAmps(watts);
+        setChargingAmps();
 
         HeartbeatMessage[CurrentHighByte] = highByte(chargingAmps);
         HeartbeatMessage[CurrentLowByte] = lowByte(chargingAmps);
