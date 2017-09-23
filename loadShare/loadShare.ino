@@ -21,7 +21,7 @@ const unsigned long STATION_WATTS_GOOD = 660000;
 const unsigned long STATION_WATTS_BAD = 500000;
 
 //76.0 watts
-const unsigned short MAX_12V_WATTS = 7600;
+const unsigned long MAX_12V_WATTS = 7600;
 
 //116.4 volts
 const unsigned short OUTPUT_VOLTS_MAX = 1164;
@@ -31,10 +31,10 @@ const unsigned short OUTPUT_VOLTS_MIN = 500;
 const unsigned short OUTPUT_AMPS_MAX =  320;
 
 //50 watts
-const unsigned short RAMP_RATE = 500;
+const unsigned short RAMP_RATE = 5000;
 
 //target wattage
-unsigned short MAX_STATION_WATTS = 0;
+unsigned long MAX_STATION_WATTS = 0;
 //target amps to charge calculated by code
 //uses MAX_STATION_WATTS and volts
 unsigned short chargingAmps = 0;
@@ -49,7 +49,7 @@ unsigned short amps = 0;
 //charging watts
 unsigned long watts = 0;
 //estimated watts being pulled from station
-unsigned short stationWatts =0;
+unsigned long stationWatts =0;
 
 MCP_CAN CAN(SPI_CS_PIN);
 
@@ -135,16 +135,13 @@ void loop() {
 
       while (CAN_MSGAVAIL == CAN.checkReceive()) {
           CAN.readMsgBuf(&ReceivedChargerMessageLength, ReceivedChargerMessage);
-          chargerCount += 1;
+          chargerCount = chargerCount + 1;
 
-          unsigned short chargerVolts = word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]);
-          if (chargerVolts > 0) {
-            volts = volts + chargerVolts;
-          }
+          volts = volts + word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]);
 
           //this could get weird if some chargers were on 120vac and
           //others on 240vac
-          amps += word(ReceivedChargerMessage[CurrentHighByte], ReceivedChargerMessage[CurrentLowByte]);
+          amps = amps + word(ReceivedChargerMessage[CurrentHighByte], ReceivedChargerMessage[CurrentLowByte]);
       }
 
       if (chargerCount > 1) {
@@ -156,28 +153,30 @@ void loop() {
 
       stationWatts = watts + MAX_12V_WATTS;
 
-      //if we are not running at full tilt
-      //or if we are not yet started this will be a slow ramp
-      if(stationWatts<MAX_STATION_WATTS){
-        watts=watts+RAMP_RATE;
-      }
-
       if (Serial && verbose) {
-        Serial.print("reported watts : ");
-        Serial.println(watts/100);
-
-        Serial.print("stationWatts : ");
-        Serial.println(stationWatts/100);
-
-        Serial.print("target station watts : ");
-        Serial.println(MAX_STATION_WATTS/100);
+        Serial.print(stationWatts);
+        Serial.print("<");
+        Serial.println(MAX_STATION_WATTS);
 
         Serial.println("---------------");
       }
 
+      //if we are not running at full tilt
+      //or if we are not yet started this will be a slow ramp
+      if(stationWatts<MAX_STATION_WATTS){
+        watts=watts+RAMP_RATE;
+
+        if (Serial && verbose) {
+          Serial.print("ramping to : ");
+          Serial.println(watts);
+
+          Serial.println("*****************");
+        }
+      }
+
       //if we want more than the station can deliver
       if (stationWatts > MAX_STATION_WATTS) {
-        watts = (MAX_STATION_WATTS / volts) - MAX_12V_WATTS;
+        watts = MAX_STATION_WATTS - MAX_12V_WATTS;
       }
 
       //set this cycles charging amps
@@ -201,14 +200,15 @@ void loop() {
   }
 
   if (Serial && verbose) {
-    Serial.print("volts * 10 : ");
-    Serial.println(volts);
+    Serial.print(volts);
+    Serial.print("v, ");
+
+    Serial.print(amps);
+    Serial.println("a");
+
 
     Serial.print("chargerCount : ");
     Serial.println(chargerCount);
-
-    Serial.print("amps reported * 10 : ");
-    Serial.println(amps);
 
     Serial.print("target charging watts * 100 : ");
     Serial.println(watts);
