@@ -137,7 +137,7 @@ void loop() {
           CAN.readMsgBuf(&ReceivedChargerMessageLength, ReceivedChargerMessage);
           chargerCount += 1;
 
-          unsigned short chargerVolts = word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]) / 10;
+          unsigned short chargerVolts = word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]);
           if (chargerVolts > 0) {
             volts = volts + chargerVolts;
           }
@@ -164,13 +164,15 @@ void loop() {
 
       if (Serial && verbose) {
         Serial.print("reported watts : ");
-        Serial.println(watts);
+        Serial.println(watts/100);
 
         Serial.print("stationWatts : ");
-        Serial.println(stationWatts);
+        Serial.println(stationWatts/100);
 
         Serial.print("target station watts : ");
-        Serial.println(MAX_STATION_WATTS);
+        Serial.println(MAX_STATION_WATTS/100);
+
+        Serial.println("---------------");
       }
 
       //if we want more than the station can deliver
@@ -199,20 +201,22 @@ void loop() {
   }
 
   if (Serial && verbose) {
-    Serial.print("volts : ");
+    Serial.print("volts * 10 : ");
     Serial.println(volts);
 
     Serial.print("chargerCount : ");
     Serial.println(chargerCount);
 
-    Serial.print("amps reported : ");
+    Serial.print("amps reported * 10 : ");
     Serial.println(amps);
 
-    Serial.print("target charging watts : ");
+    Serial.print("target charging watts * 100 : ");
     Serial.println(watts);
 
-    Serial.print("target chargingAmps : ");
+    Serial.print("target chargingAmps * 10 : ");
     Serial.println(chargingAmps);
+
+    Serial.println("================");
   }
 
   // frame status = extended in second arg
