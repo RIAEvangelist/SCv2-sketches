@@ -3,7 +3,7 @@
 
 #include <SPI.h>
 
-#define BAUD_RATE 115200
+#define BAUD_RATE 38400
 #define HeartbeatMessageID 0x1806E5F4
 #define HeartbeatMessageLength 8
 
@@ -13,12 +13,9 @@
 #define CurrentLowByte 3
 
 const int SPI_CS_PIN = 9;
-int lowPowerStation = 7;
 
 //6600.0kw
 const unsigned long STATION_WATTS_GOOD = 660000;
-//5000.0 kw
-const unsigned long STATION_WATTS_BAD = 500000;
 
 //76.0 watts
 const unsigned long MAX_12V_WATTS = 7600;
@@ -39,13 +36,13 @@ unsigned long MAX_STATION_WATTS = 0;
 //uses MAX_STATION_WATTS and volts
 unsigned short chargingAmps = 0;
 
-bool verbose=true;
-
 int chargerCount = 0;
 //current voltage
 unsigned short volts = 0;
 //charging amps
 unsigned short amps = 0;
+//previous watts
+unsigned long lastWatts = 0;
 //charging watts
 unsigned long watts = 0;
 //estimated watts being pulled from station
@@ -73,9 +70,6 @@ char str[20];
 
 void MCP2515_ISR() {
     flagRecv = 1;
-    if (Serial && verbose) {
-      Serial.println("got can");
-    }
 }
 
 void setChargingAmps(){
@@ -87,29 +81,33 @@ void setUpStationLimits(){
   if(MAX_STATION_WATTS==0){
     MAX_STATION_WATTS = STATION_WATTS_GOOD;
   }
+}
 
-  //if low Power station switch on and wattage not modified
-  if (digitalRead(lowPowerStation) && MAX_STATION_WATTS == STATION_WATTS_GOOD) {
-    if (MAX_STATION_WATTS != STATION_WATTS_BAD) {
-      MAX_STATION_WATTS = STATION_WATTS_BAD;
-    }
-  }
+void readCommands(){
+  while(Serial.available()){
+    String commandWatts = Serial.readStringUntil("\n");
 
-  //if NOT low Power station switch on and wattage not modified
-  if (!digitalRead(lowPowerStation) && MAX_STATION_WATTS == STATION_WATTS_BAD) {
-    if (MAX_STATION_WATTS != STATION_WATTS_GOOD) {
-      MAX_STATION_WATTS = STATION_WATTS_GOOD;
+    Serial.println(commandWatts);
+
+    // And again parse that as an int.
+    unsigned long targetWattage = commandWatts.toInt();
+
+    Serial.println(targetWattage);
+
+    Serial.println(targetWattage>=0);
+
+    if(targetWattage>=0){
+      MAX_STATION_WATTS=targetWattage;
     }
+
+    Serial.println(MAX_STATION_WATTS);
   }
 }
 
 void setup() {
-  if (Serial && verbose) {
+  if (Serial) {
     Serial.begin(BAUD_RATE);
   }
-
-  pinMode(lowPowerStation, INPUT_PULLUP);
-  //digitalWrite(lowPowerStation, LOW);
 
   // initialize the CAN bus at baud rate 250kbps
   while (CAN_OK != CAN.begin(CAN_250KBPS)) {
@@ -123,6 +121,8 @@ void loop() {
 
   setUpStationLimits();
 
+  readCommands();
+
   if (flagRecv) {
       flagRecv = 0;
 
@@ -131,6 +131,7 @@ void loop() {
       chargerCount = 0;
       volts = 0;
       amps = 0;
+      lastWatts=watts;
       watts = 0;
 
       while (CAN_MSGAVAIL == CAN.checkReceive()) {
@@ -139,8 +140,8 @@ void loop() {
 
           volts = volts + word(ReceivedChargerMessage[VoltageHighByte], ReceivedChargerMessage[VoltageLowByte]);
 
-          //this could get weird if some chargers were on 120vac and
-          //others on 240vac
+          //this could cause wattage to read high
+          //if some chargers were on 120vac and others on 240vac
           amps = amps + word(ReceivedChargerMessage[CurrentHighByte], ReceivedChargerMessage[CurrentLowByte]);
       }
 
@@ -151,27 +152,16 @@ void loop() {
 
       watts = (amps * volts);
 
-      stationWatts = watts + MAX_12V_WATTS;
-
-      if (Serial && verbose) {
-        Serial.print(stationWatts);
-        Serial.print("<");
-        Serial.println(MAX_STATION_WATTS);
-
-        Serial.println("---------------");
+      if(watts<lastWatts){
+        watts=lastWatts;
       }
+
+      stationWatts = watts + MAX_12V_WATTS;
 
       //if we are not running at full tilt
       //or if we are not yet started this will be a slow ramp
       if(stationWatts<MAX_STATION_WATTS){
         watts=watts+RAMP_RATE;
-
-        if (Serial && verbose) {
-          Serial.print("ramping to : ");
-          Serial.println(watts);
-
-          Serial.println("*****************");
-        }
       }
 
       //if we want more than the station can deliver
@@ -179,44 +169,62 @@ void loop() {
         watts = MAX_STATION_WATTS - MAX_12V_WATTS;
       }
 
-      //set this cycles charging amps
-      if (watts > 0) {
-        setChargingAmps();
-      }
-
       //stop the charger for this cycle if the max voltage reached
       if (volts > OUTPUT_VOLTS_MAX) {
-        chargingAmps=0;
+        watts=0;
       }
 
       //stop the charger for this cycle if the max voltage reached
       if (volts < OUTPUT_VOLTS_MIN) {
         // Set current to zero:
-        chargingAmps=0;
+        watts=0;
+      }
+
+      //set this cycles charging amps
+      if (watts > 0) {
+        setChargingAmps();
       }
 
       HeartbeatMessage[CurrentHighByte] = highByte(chargingAmps);
       HeartbeatMessage[CurrentLowByte] = lowByte(chargingAmps);
   }
 
-  if (Serial && verbose) {
+  if (Serial) {
+    //battery volts
     Serial.print(volts);
-    Serial.print("v, ");
+    Serial.print(",");
 
+    //total charging amps
     Serial.print(amps);
-    Serial.println("a");
+    Serial.print(",");
 
+    //total charging amps per charger
+    Serial.print(amps/chargerCount);
+    Serial.print(",");
 
-    Serial.print("chargerCount : ");
-    Serial.println(chargerCount);
+    //charger count
+    Serial.print(chargerCount);
+    Serial.print(",");
 
-    Serial.print("target charging watts * 100 : ");
-    Serial.println(watts);
+    //target watts
+    Serial.print(watts);
+    Serial.print(",");
 
-    Serial.print("target chargingAmps * 10 : ");
-    Serial.println(chargingAmps);
+    //target max watts
+    Serial.print(MAX_STATION_WATTS);
+    Serial.print(",");
 
-    Serial.println("================");
+    //target total amps
+    Serial.print(chargingAmps*chargerCount);
+    Serial.print(",");
+
+    //target amps per charger
+    Serial.print(chargingAmps);
+
+    //start extending with a comma
+    //Serial.print(",");
+
+    Serial.println("");
   }
 
   // frame status = extended in second arg
