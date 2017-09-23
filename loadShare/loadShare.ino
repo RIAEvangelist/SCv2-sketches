@@ -16,12 +16,12 @@ const int SPI_CS_PIN = 9;
 int lowPowerStation = 7;
 
 //6600.0kw
-const unsigned long STATION_WATTS_GOOD = 66000;
+const unsigned long STATION_WATTS_GOOD = 660000;
 //5000.0 kw
-const unsigned long STATION_WATTS_BAD = 50000;
+const unsigned long STATION_WATTS_BAD = 500000;
 
 //76.0 watts
-const unsigned short MAX_12V_WATTS = 760;
+const unsigned short MAX_12V_WATTS = 7600;
 
 //116.4 volts
 const unsigned short OUTPUT_VOLTS_MAX = 1164;
@@ -39,7 +39,7 @@ unsigned short MAX_STATION_WATTS = 0;
 //uses MAX_STATION_WATTS and volts
 unsigned short chargingAmps = 0;
 
-bool verbose=false;
+bool verbose=true;
 
 int chargerCount = 0;
 //current voltage
@@ -55,7 +55,8 @@ MCP_CAN CAN(SPI_CS_PIN);
 
 unsigned char HeartbeatMessage[HeartbeatMessageLength] = {
   // Voltage, high then low byte in volts
-  //default 116.4 overwritten immediately
+  //default 116.4 not overwritten anywhere,
+  //this could be dynamic
   0x04, 0x8c,
   // Current, high then low byte in amps
   //default 32.0 overwritten immediately
@@ -158,7 +159,18 @@ void loop() {
       //if we are not running at full tilt
       //or if we are not yet started this will be a slow ramp
       if(stationWatts<MAX_STATION_WATTS){
-        watts+=RAMP_RATE;
+        watts=watts+RAMP_RATE;
+      }
+
+      if (Serial && verbose) {
+        Serial.print("reported watts : ");
+        Serial.println(watts);
+
+        Serial.print("stationWatts : ");
+        Serial.println(stationWatts);
+
+        Serial.print("target station watts : ");
+        Serial.println(MAX_STATION_WATTS);
       }
 
       //if we want more than the station can deliver
@@ -169,24 +181,38 @@ void loop() {
       //set this cycles charging amps
       if (watts > 0) {
         setChargingAmps();
-
-        HeartbeatMessage[CurrentHighByte] = highByte(chargingAmps);
-        HeartbeatMessage[CurrentLowByte] = lowByte(chargingAmps);
       }
 
       //stop the charger for this cycle if the max voltage reached
       if (volts > OUTPUT_VOLTS_MAX) {
-        // Set current to zero:
-        HeartbeatMessage[CurrentHighByte] = highByte(0);
-        HeartbeatMessage[CurrentLowByte] = lowByte(0);
+        chargingAmps=0;
       }
 
       //stop the charger for this cycle if the max voltage reached
       if (volts < OUTPUT_VOLTS_MIN) {
         // Set current to zero:
-        HeartbeatMessage[CurrentHighByte] = highByte(0);
-        HeartbeatMessage[CurrentLowByte] = lowByte(0);
+        chargingAmps=0;
       }
+
+      HeartbeatMessage[CurrentHighByte] = highByte(chargingAmps);
+      HeartbeatMessage[CurrentLowByte] = lowByte(chargingAmps);
+  }
+
+  if (Serial && verbose) {
+    Serial.print("volts : ");
+    Serial.println(volts);
+
+    Serial.print("chargerCount : ");
+    Serial.println(chargerCount);
+
+    Serial.print("amps reported : ");
+    Serial.println(amps);
+
+    Serial.print("target charging watts : ");
+    Serial.println(watts);
+
+    Serial.print("target chargingAmps : ");
+    Serial.println(chargingAmps);
   }
 
   // frame status = extended in second arg
