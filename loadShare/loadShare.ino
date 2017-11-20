@@ -32,6 +32,8 @@
 #define OUTPUT_VOLTS_MAX 1164
 //113.5 ~80%
 #define OUTPUT_VOLTS_CUTBACK 1135
+//1800.00 watts
+#define OUTPUT_WATTS_CUTBACK 180000
 //50.0 volts
 #define OUTPUT_VOLTS_MIN 500
 //32.0 amps
@@ -175,7 +177,7 @@ void loop() {
         watts=0;
       }
 
-      if (volts > OUTPUT_VOLTS_CUTBACK) {
+      if (volts > OUTPUT_VOLTS_CUTBACK && watts > OUTPUT_WATTS_CUTBACK) {
         watts=watts*.75;
       }
 
