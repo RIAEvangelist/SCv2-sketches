@@ -1,8 +1,12 @@
+#include <EEPROM.h>
 #include <mcp_can.h>
 #include <mcp_can_dfs.h>
 
 #include <SPI.h>
 
+#define SPI_CS_PIN 9
+
+#define VERSION 2
 #define BAUD_RATE 38400
 #define HeartbeatMessageID 0x1806E5F4
 #define HeartbeatMessageLength 8
@@ -12,23 +16,29 @@
 #define CurrentHighByte 2
 #define CurrentLowByte 3
 
-const int SPI_CS_PIN = 9;
+#define TargetWattsAddress 0
 
-//6600.0kw
-const unsigned long STATION_WATTS_GOOD = 660000;
+//over 12000.00 is not a possible option with this code
+//if a value over 12kw is stored it will default back to 
+//the STATION_WATTS_DEFAULT value
+#define WATTAGE_MAX_UNSET 1200000
 
+//6600.00
+#define STATION_WATTS_DEFAULT 660000
 //76.0 watts
-const unsigned long MAX_12V_WATTS = 7600;
+#define MAX_12V_WATTS 7600
 
 //116.4 volts
-const unsigned short OUTPUT_VOLTS_MAX = 1164;
+#define OUTPUT_VOLTS_MAX 1164
+//113.5 ~80%
+#define OUTPUT_VOLTS_CUTBACK 1135
 //50.0 volts
-const unsigned short OUTPUT_VOLTS_MIN = 500;
+#define OUTPUT_VOLTS_MIN 500
 //32.0 amps
-const unsigned short OUTPUT_AMPS_MAX =  320;
+#define OUTPUT_AMPS_MAX 320
 
 //50 watts
-const unsigned short RAMP_RATE = 5000;
+#define RAMP_RATE 5000
 
 //target wattage
 unsigned long MAX_STATION_WATTS = 0;
@@ -76,35 +86,28 @@ void setChargingAmps(){
   chargingAmps = watts / volts / chargerCount;
 }
 
-void setUpStationLimits(){
-  //default to good station if max not yet set
-  if(MAX_STATION_WATTS==0){
-    MAX_STATION_WATTS = STATION_WATTS_GOOD;
-  }
-}
-
 void readCommands(){
   while(Serial.available()){
     String commandWatts = Serial.readStringUntil("\n");
-
-    Serial.println(commandWatts);
-
-    // And again parse that as an int.
     unsigned long targetWattage = commandWatts.toInt();
-
-    Serial.println(targetWattage);
-
-    Serial.println(targetWattage>=0);
-
     if(targetWattage>=0){
       MAX_STATION_WATTS=targetWattage;
+      EEPROM.put(TargetWattsAddress, MAX_STATION_WATTS);
     }
 
-    Serial.println(MAX_STATION_WATTS);
+    if(targetWattage<0){
+      MAX_STATION_WATTS=0;
+    }
   }
 }
 
 void setup() {
+  EEPROM.get(TargetWattsAddress,MAX_STATION_WATTS);
+
+  if(MAX_STATION_WATTS>WATTAGE_MAX_UNSET){
+    MAX_STATION_WATTS=STATION_WATTS_DEFAULT;
+  }
+  
   if (Serial) {
     Serial.begin(BAUD_RATE);
   }
@@ -118,8 +121,6 @@ void setup() {
 }
 
 void loop() {
-
-  setUpStationLimits();
 
   readCommands();
 
@@ -174,6 +175,10 @@ void loop() {
         watts=0;
       }
 
+      if (volts > OUTPUT_VOLTS_CUTBACK) {
+        watts=watts*.75;
+      }
+
       //stop the charger for this cycle if the max voltage reached
       if (volts < OUTPUT_VOLTS_MIN) {
         // Set current to zero:
@@ -222,9 +227,10 @@ void loop() {
     Serial.print(chargingAmps);
 
     //start extending with a comma
-    //Serial.print(",");
+    Serial.print(",");
 
-    Serial.println("");
+    //print api version
+    Serial.println(VERSION);
   }
 
   // frame status = extended in second arg
