@@ -18,10 +18,10 @@
 
 #define TargetWattsAddress 0
 
-//over 12000.00 is not a possible option with this code
-//if a value over 12kw is stored it will default back to 
+//over 14000.00 is not a possible option with this code
+//if a value over 14kw is stored it will default back to 
 //the STATION_WATTS_DEFAULT value
-#define WATTAGE_MAX_UNSET 1200000
+#define WATTAGE_MAX_UNSET 1400000
 
 //6600.00
 #define STATION_WATTS_DEFAULT 660000
@@ -30,10 +30,6 @@
 
 //116.4 volts
 #define OUTPUT_VOLTS_MAX 1164
-//113.5 ~80%
-#define OUTPUT_VOLTS_CUTBACK 1135
-//1800.00 watts
-#define OUTPUT_WATTS_CUTBACK 180000
 //50.0 volts
 #define OUTPUT_VOLTS_MIN 500
 //32.0 amps
@@ -41,6 +37,13 @@
 
 //50 watts
 #define RAMP_RATE 5000
+
+//number of cutback points
+#define CUTBACK_COUNT 5
+//113.0,113.5,114.5,115.5,116 ~80%->99%
+const unsigned short OUTPUT_VOLTS_CUTBACK[]={1130,1135,1145,1155,1160};
+//7000.00,6000.00,5000.00,4000.00,3000.00 watts
+const unsigned long OUTPUT_WATTS_CUTBACK[]={700000,600000,500000,400000,300000};
 
 //target wattage
 unsigned long MAX_STATION_WATTS = 0;
@@ -68,7 +71,8 @@ unsigned char HeartbeatMessage[HeartbeatMessageLength] = {
   //this could be dynamic
   0x04, 0x8c,
   // Current, high then low byte in amps
-  //default 32.0 overwritten immediately
+  //default 32.0 overwritten immediately unless no can messages recieved
+  //this can happen on some older units when on 120v
   0x01, 0x40,
   // Reserved/status
   0x00, 0x00, 0x00, 0x00
@@ -177,8 +181,11 @@ void loop() {
         watts=0;
       }
 
-      if (volts > OUTPUT_VOLTS_CUTBACK && watts > OUTPUT_WATTS_CUTBACK) {
-        watts=watts*.75;
+      //check for cutback requirement scenarios.
+      for (int i = 0; i < CUTBACK_COUNT; i++) {
+         if (volts > OUTPUT_VOLTS_CUTBACK[i] && watts > OUTPUT_WATTS_CUTBACK[i]) {
+             watts=watts-RAMP_RATE;
+         }
       }
 
       //stop the charger for this cycle if the max voltage reached
