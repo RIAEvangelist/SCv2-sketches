@@ -3,6 +3,9 @@ Sketches for SCv2
 
 The primary sketch for productiuon is the [load share](https://github.com/RIAEvangelist/SCv2-sketches/blob/master/loadShare/loadShare.ino)
 
+#### Licensed under MIT license
+See the [MIT license](https://github.com/RIAEvangelist/SCv2-sketches/blob/master/license) file.
+
 # Primary Code Functionality
 
 * Calculates and shares target wattage among upto 3 SCv2 modules
