@@ -4,7 +4,7 @@ Sketches for SCv2
 The primary sketch for productiuon is the [load share](https://github.com/RIAEvangelist/SCv2-sketches/blob/master/loadShare/loadShare.ino)
 
 #### Licensed under MIT license
-See the [modified MIT license](https://github.com/RIAEvangelist/SCv2-sketches/blob/master/License.md) file.
+See the [modified MIT license](https://github.com/RIAEvangelist/SCv2-sketches/blob/master/license.md) file.
 
 # Primary Code Functionality
 
